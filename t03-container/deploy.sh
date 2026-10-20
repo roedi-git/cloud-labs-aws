@@ -32,18 +32,27 @@ ensure_role() {   # ensure_role <name> <service principal> <managed policy>
 ensure_role "$exec_role" ecs-tasks.amazonaws.com AmazonECSTaskExecutionRolePolicy
 ensure_role "$infra_role" ecs.amazonaws.com AmazonECSInfrastructureRoleforExpressGatewayServices
 
+use_deployer_role "$LAB"
+
 service_name=$(name placefinder)
 log "Creating Express Mode service $service_name with $image ..."
-service_arn=$(aws ecs create-express-gateway-service \
-  --service-name "$service_name" \
-  --execution-role-arn "arn:aws:iam::$account:role/$exec_role" \
-  --infrastructure-role-arn "arn:aws:iam::$account:role/$infra_role" \
-  --primary-container "{\"image\": \"$image\", \"containerPort\": 8000}" \
-  --cpu 256 --memory 512 \
-  --health-check-path /health \
-  --scaling-target '{"minTaskCount": 1, "maxTaskCount": 2}' \
-  --tags "key=course,value=$COURSE_TAG" "key=lab,value=$LAB" \
-  --query service.serviceArn --output text)
+# New IAM roles can take a minute until ECS accepts them, so retry
+service_arn=
+for attempt in $(seq 6); do
+  service_arn=$(aws ecs create-express-gateway-service \
+    --service-name "$service_name" \
+    --execution-role-arn "arn:aws:iam::$account:role/$exec_role" \
+    --infrastructure-role-arn "arn:aws:iam::$account:role/$infra_role" \
+    --primary-container "{\"image\": \"$image\", \"containerPort\": 8000}" \
+    --cpu 256 --memory 512 \
+    --health-check-path /health \
+    --scaling-target '{"minTaskCount": 1, "maxTaskCount": 2}' \
+    --tags "key=course,value=$COURSE_TAG" "key=lab,value=$LAB" \
+    --query service.serviceArn --output text) && break
+  log "Attempt $attempt failed, retrying in 15 seconds ..."
+  sleep 15
+done
+[[ -n "$service_arn" ]] || die "Could not create the service. See the AWS error above."
 save_state "$LAB" SERVICE_ARN "$service_arn"
 
 # The endpoint appears as soon as the first configuration is active

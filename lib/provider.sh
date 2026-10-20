@@ -12,6 +12,36 @@ check_login() {
 
 account_id() { aws sts get-caller-identity --query Account --output text; }
 
+# Some services (ECS Express Mode) call other services with the caller's
+# credentials and reject the session of "aws login". Switch to a role that
+# only the current user may assume; it gets the same rights as that user.
+use_deployer_role() {   # use_deployer_role <lab>
+  local role caller creds=
+  role=$(name deployer)
+  caller=$(aws sts get-caller-identity --query Arn --output text)
+  if ! aws iam get-role --role-name "$role" >/dev/null 2>&1; then
+    log "Creating IAM role $role ..."
+    # shellcheck disable=SC2046
+    aws iam create-role --role-name "$role" --tags $(aws_tags "$1") \
+      --assume-role-policy-document "{
+        \"Version\": \"2012-10-17\",
+        \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"$caller\"},
+                        \"Action\": \"sts:AssumeRole\"}]}" >/dev/null
+    aws iam attach-role-policy --role-name "$role" --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+  fi
+  # A new role takes a few seconds until STS knows it
+  for _ in $(seq 12); do
+    creds=$(aws sts assume-role --role-arn "arn:aws:iam::$(account_id):role/$role" \
+      --role-session-name "$1" \
+      --query '[Credentials.AccessKeyId, Credentials.SecretAccessKey, Credentials.SessionToken]' \
+      --output text 2>/dev/null) && break
+    sleep 5
+  done
+  [[ -n "$creds" ]] || die "Could not assume role $role."
+  read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<<"$creds"
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
 # Tags for "--tags" (S3, ECR, IAM ...) and for "--tag-specifications" (EC2)
 aws_tags() { echo "Key=course,Value=$COURSE_TAG Key=lab,Value=$1"; }
 tag_spec() {   # tag_spec <resource type> <lab> <name>

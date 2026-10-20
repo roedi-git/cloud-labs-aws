@@ -53,7 +53,7 @@ AWS App Runner nimmt seit 30. April 2026 keine neuen Kunden mehr an; AWS empfieh
 ./deploy.sh                     # Express-Mode-Dienst anlegen, auf /health warten
 ```
 
-`push-image.sh` legt das Repository mit Schwachstellen-Scan beim Push und einer Lebenszyklusregel an, die nur die fünf neuesten Images behält. `deploy.sh` legt zwei IAM-Rollen an: die Execution Role, mit der ECS das Image lädt und Logs schreibt, und die Infrastructure Role, mit der Express Mode Load Balancer und Autoscaling verwaltet.
+`push-image.sh` legt das Repository mit Schwachstellen-Scan beim Push und einer Lebenszyklusregel an, die nur die fünf neuesten Images behält. `deploy.sh` legt drei IAM-Rollen an: die Execution Role, mit der ECS das Image lädt und Logs schreibt, die Infrastructure Role, mit der Express Mode Load Balancer und Autoscaling verwaltet, und die Rolle `pf-<owner>-deployer` für den Aufruf selbst. Express Mode legt Log-Gruppe und Security Group mit den Zugangsdaten des Aufrufers an und lehnt dabei die Sitzung von `aws login` ab („The security token included in the request is invalid“). Das Skript übernimmt deshalb vorher die Deployer-Rolle; nur der eigene IAM-Benutzer darf sie übernehmen, und sie hat dieselben Rechte wie er.
 
 Der erste Start dauert etwa fünf Minuten. Der Status lässt sich verfolgen mit:
 

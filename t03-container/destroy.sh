@@ -35,7 +35,7 @@ if aws ecr describe-repositories --repository-names "$repo_name" >/dev/null 2>&1
 fi
 
 # The infrastructure role must outlive the service, so it goes last
-for role in "$(name ecs-execution)" "$(name ecs-infrastructure)"; do
+for role in "$(name ecs-execution)" "$(name ecs-infrastructure)" "$(name deployer)"; do
   if aws iam get-role --role-name "$role" >/dev/null 2>&1; then
     for policy in $(aws iam list-attached-role-policies --role-name "$role" \
         --query 'AttachedPolicies[].PolicyArn' --output text); do
