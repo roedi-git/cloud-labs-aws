@@ -10,11 +10,17 @@ load_state "$LAB"
 confirm "Delete the PlaceFinder service, its ECR repository and the IAM roles?" || exit 0
 
 if [[ -n "${SERVICE_ARN:-}" ]]; then
-  log "Deleting service (removes load balancer, target groups and security groups) ..."
-  aws ecs delete-express-gateway-service --service-arn "$SERVICE_ARN" >/dev/null
+  service_status() {
+    aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" \
+      --query service.status.statusCode --output text 2>/dev/null || echo INACTIVE
+  }
+  # A second run finds the service still DRAINING; deleting it again fails
+  if [[ "$(service_status)" == "ACTIVE" ]]; then
+    log "Deleting service (removes load balancer, target groups and security groups) ..."
+    aws ecs delete-express-gateway-service --service-arn "$SERVICE_ARN" >/dev/null
+  fi
   for _ in $(seq 60); do
-    status=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" \
-      --query service.status.statusCode --output text 2>/dev/null || echo INACTIVE)
+    status=$(service_status)
     [[ "$status" == "INACTIVE" ]] && break
     log "Service status: $status, waiting ..."
     sleep 30
